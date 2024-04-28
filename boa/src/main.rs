@@ -1,9 +1,9 @@
+use std::any::Any;
 use std::{env, result, vec};
 use std::fs::File;
 use std::hash::Hash;
 use std::io::prelude::*;
 
-use prettydiff::format_table::new;
 use sexp::Atom::*;
 use sexp::*;
 
@@ -20,6 +20,15 @@ enum Val {
 enum Reg {
     RAX,
     RSP,
+}
+
+impl Reg{
+    fn to_string(&self) -> String {
+        match self {
+            Reg::RAX => "rax".to_string(),
+            Reg::RSP => "rsp".to_string(),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -145,29 +154,102 @@ fn compile_to_instrs(e: &Expr, stack: &Stack, mut stck_ptr: i32) -> Vec<Instr> {
             instrs.push(Instr::ISub(Val::Reg(Reg::RAX), Val::Imm(1)));
         },
         Expr::BinOp(op, exp1, exp2) if matches!(op, Op2::Plus) => {
-            let mut new_stack: Stack = stack.clone();
-            let mut exp1_code = compile_to_instrs(&exp1, &stack, stck_ptr);
+           
+            //compile into assembly fo the first expression in the bin op
+            let mut exp1_code = compile_to_instrs(&exp1, &stack.clone(), stck_ptr);
+            //reserve a space in the space at stack pointer + 1
             let exp1_pos = stck_ptr + 1;
             instrs.append(&mut exp1_code);
-            let save_exp1: Instr = Instr::IMov(Val::RegOffset(Reg::RSP, exp1_pos), Val::Reg(Reg::RAX));
-            instrs.push(save_exp1);
-            new_stack = new_stack.update(k, v)
-            
 
+            //put the resulting RAX from exp one into stack pointer + 1
+            let save_exp1: Instr = Instr::IMov(Val::RegOffset(Reg::RSP, exp1_pos), Val::Reg(Reg::RAX));
+
+            instrs.push(save_exp1);
+
+                        //compile into assembly fo the first expression in the second op
+            let mut exp2_code = compile_to_instrs(&exp2, &stack.clone(), stck_ptr);
+            instrs.append(&mut exp2_code);
+
+            let add_exps: Instr = Instr::IAdd(Val::Reg(Reg::RAX),Val::RegOffset(Reg::RSP, exp1_pos));
+            instrs.push(add_exps);
         },
-        Expr::BinOp(op, exp1, exp2) if matches!(op, Op2::Minus) => todo!(),
-        Expr::BinOp(op, exp1, exp2) if matches!(op, Op2::Times) => todo!(),
-        _ => panic!("compile_error"),
-    }
-    return  instrs;
+        Expr::BinOp(op, exp1, exp2) if matches!(op, Op2::Minus) => {
+            //compile into assembly fo the first expression in the bin op
+            let mut exp1_code = compile_to_instrs(&exp1, &stack.clone(), stck_ptr);
+            //reserve a space in the space at stack pointer + 1
+            let exp1_pos = stck_ptr + 1;
+            instrs.append(&mut exp1_code);
+
+            //put the resulting RAX from exp one into stack pointer + 1
+            let save_exp1: Instr = Instr::IMov(Val::RegOffset(Reg::RSP, exp1_pos), Val::Reg(Reg::RAX));
+
+            instrs.push(save_exp1);
+
+                        //compile into assembly fo the first expression in the second op
+            let mut exp2_code = compile_to_instrs(&exp2, &stack.clone(), stck_ptr);
+            instrs.append(&mut exp2_code);
+
+            let add_exps: Instr = Instr::IAdd(Val::Reg(Reg::RAX),Val::RegOffset(Reg::RSP, exp1_pos));
+            instrs.push(add_exps);
+        },
+        Expr::BinOp(op, exp1, exp2) if matches!(op, Op2::Times) => {
+             //compile into assembly fo the first expression in the bin op
+            let mut exp1_code = compile_to_instrs(&exp1, &stack.clone(), stck_ptr);
+            //reserve a space in the space at stack pointer + 1
+            let exp1_pos = stck_ptr + 1;
+            instrs.append(&mut exp1_code);
+
+            //put the resulting RAX from exp one into stack pointer + 1
+            let save_exp1: Instr = Instr::IMov(Val::RegOffset(Reg::RSP, exp1_pos), Val::Reg(Reg::RAX));
+
+            instrs.push(save_exp1);
+
+                        //compile into assembly fo the first expression in the second op
+            let mut exp2_code = compile_to_instrs(&exp2, &stack.clone(), stck_ptr);
+            instrs.append(&mut exp2_code);
+
+            let add_exps: Instr = Instr::IMul(Val::Reg(Reg::RAX),Val::RegOffset(Reg::RSP, exp1_pos));
+            instrs.push(add_exps);
+            },
+            _ => {panic!("compile_error")},
+        };
+     
+     return instrs;
 }
+    
+
 
 fn instr_to_str(i: &Instr) -> String {
-    todo!("instr_to_str");
+    match i { 
+        Instr::IAdd(v1, v2) => {
+            format!("add {}, {}",val_to_str(v1),val_to_str(v2)).to_string()
+        }
+        Instr::IMov(v1, v2) => {
+            format!("mov {}, {}",val_to_str(v1),val_to_str(v2)).to_string()
+        },
+        Instr::ISub(v1, v2) => {
+            format!("sub {}, {}",val_to_str(v1),val_to_str(v2)).to_string()
+        },
+        Instr::IMul(v1, v2) => {
+            format!("mul {}, {}",val_to_str(v1),val_to_str(v2)).to_string()
+        },
+    }
 }
 
 fn val_to_str(v: &Val) -> String {
-    todo!("val_to_str");
+    match v {
+        Val::Imm(i) => {
+            i.to_string()
+        },
+        Val::Reg(reg) => {
+            reg.to_string()    
+        },
+        Val::RegOffset(reg, offset)  => {
+           format!("[{} - 8*{}]", reg.to_string(), *offset).to_string()
+        },
+        _ => {panic!("compile_error")},
+
+    }
 }
 
 fn main() -> std::io::Result<()> {
