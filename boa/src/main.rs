@@ -1,13 +1,12 @@
-use std::any::Any;
-use std::{env, result, vec};
+use std::{env,  vec};
 use std::fs::File;
-use std::hash::Hash;
+//use std::hash::Hash;
 use std::io::prelude::*;
 
 use sexp::Atom::*;
 use sexp::*;
 
-use im::{hashmap, HashMap, HashSet};
+//use im::{hashmap, HashMap, HashSet};
 
 #[derive(Debug)]
 enum Val {
@@ -73,9 +72,7 @@ fn parse_expr(s: &Sexp) -> Expr {
                 [Sexp::Atom(S(op)), e1, e2] if op == "+" => Expr::BinOp(Op2::Plus, Box::new(parse_expr(e1)),Box::new(parse_expr(e2))),
                 [Sexp::Atom(S(op)), e1, e2] if op == "-" => Expr::BinOp(Op2::Minus, Box::new(parse_expr(e1)),Box::new(parse_expr(e2))),
                 [Sexp::Atom(S(op)), e1, e2] if op == "*" => Expr::BinOp(Op2::Times, Box::new(parse_expr(e1)),Box::new(parse_expr(e2))),
-                [Sexp::Atom(S(op)), ..] if op == "Let" => {
-                    let bindings = &vec[1..vec.len() - 1];
-                    let e = vec.last().unwrap();
+                [Sexp::Atom(S(op)), Sexp::List(bindings), e] if op == "let" => {
                     let mut parsed_bindings = vec![];
                     for binding in bindings{
                         parsed_bindings.push(parse_bind(binding))
@@ -94,6 +91,7 @@ fn parse_bind(s: &Sexp) -> (String, Expr) {
         Sexp::List(vec) => {
             match &vec[..] {
                [Sexp::Atom(S(s)), e] => (s.to_string(), parse_expr(e)),
+               [Sexp::Atom(S(s))] => panic!("Unbound variable identifier {}", s),
                 _ => panic!("parse error"),
             }
         },
@@ -113,6 +111,9 @@ fn compile_to_instrs(e: &Expr, stack: &Stack, mut stck_ptr: i32) -> Vec<Instr> {
             instrs.push(Instr::IMov(Val::Reg(Reg::RAX), Val::Imm(*n)));
         },
         Expr::Id(var) => {
+            if !stack.contains_key(var){
+                panic!("Unbound variable identifier {}", var)
+            }
             instrs.push(Instr::IMov(Val::Reg(Reg::RAX), Val::RegOffset(Reg::RSP, *stack.get(var).unwrap())));
         },
 
@@ -122,7 +123,7 @@ fn compile_to_instrs(e: &Expr, stack: &Stack, mut stck_ptr: i32) -> Vec<Instr> {
            //some sort of number in RAX
            //that value in RAX will be put inside the stack, and itll have an assigned thing based on let
 
-           let mut scope_bindings = HashSet::new();
+           let mut scope_bindings = im::HashSet::new();
 
            let mut new_stack: Stack = stack.clone();
            for binding in bindings{
@@ -189,7 +190,7 @@ fn compile_to_instrs(e: &Expr, stack: &Stack, mut stck_ptr: i32) -> Vec<Instr> {
             let mut exp2_code = compile_to_instrs(&exp2, &stack.clone(), stck_ptr);
             instrs.append(&mut exp2_code);
 
-            let add_exps: Instr = Instr::IAdd(Val::Reg(Reg::RAX),Val::RegOffset(Reg::RSP, exp1_pos));
+            let add_exps: Instr = Instr::ISub(Val::RegOffset(Reg::RSP, exp1_pos), Val::Reg(Reg::RAX));
             instrs.push(add_exps);
         },
         Expr::BinOp(op, exp1, exp2) if matches!(op, Op2::Times) => {
@@ -246,8 +247,7 @@ fn val_to_str(v: &Val) -> String {
         },
         Val::RegOffset(reg, offset)  => {
            format!("[{} - 8*{}]", reg.to_string(), *offset).to_string()
-        },
-        _ => {panic!("compile_error")},
+        }
 
     }
 }
@@ -272,6 +272,7 @@ fn main() -> std::io::Result<()> {
     let mut result = "".to_owned();
     for instr in instrs{
         result.push_str(instr_to_str(&instr).as_str());
+        result.push_str("\n");
     }
     
 
