@@ -1,7 +1,7 @@
 use std::{env,  vec};
 use std::fs::File;
 //use std::hash::Hash;
-use std::io::prelude::*;
+use std::io::{prelude::*, stdin, stdout};
 
 use sexp::Atom::*;
 use sexp::*;
@@ -254,6 +254,35 @@ fn val_to_str(v: &Val) -> String {
 
 fn main() -> std::io::Result<()> {
     let args: Vec<String> = env::args().collect();
+
+    if &args[1] == "-i" {
+        println!("You are in interactive mode!");   
+        stdout().flush()?; // Flush stdout to ensure the message is displayed immediately
+
+        loop {
+            print!(">");
+            stdout().flush()?; // Flush stdout to ensure the message is displayed immediately
+            let mut buffer = String::new();
+            stdin().read_line(&mut buffer)?;
+            let trimmed_buffer = buffer.trim();
+            if trimmed_buffer == "exit" {
+                return Ok(());
+            }
+            let expr = parse_expr(&sexp::parse(&trimmed_buffer).unwrap());
+            let stack_offset    = 0;
+            let stack = im::HashMap::new();
+            let instrs = compile_to_instrs(&expr, &stack,stack_offset);        
+            let mut instr_string = "".to_owned();
+            for instr in instrs{
+                instr_string.push_str(instr_to_str(&instr).as_str());
+                instr_string.push_str("\n");
+            }
+
+
+            print!("{}",instr_string);
+        }
+      
+    }
 
     let in_name = &args[1];
     let out_name = &args[2];
