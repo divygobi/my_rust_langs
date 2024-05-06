@@ -2,7 +2,7 @@ use std::{env,  vec};
 use std::fs::File;
 //use std::hash::Hash;
 use std::io::{prelude::*, stdin, stdout};
-
+use dynasmrt::{dynasm, DynasmApi};
 use sexp::Atom::*;
 use sexp::*;
 
@@ -252,6 +252,45 @@ fn val_to_str(v: &Val) -> String {
     }
 }
 
+
+fn reg_to_index(r: &Reg) -> u8 {
+    match r {
+        Reg::RAX => 0,
+        Reg::RSP => 4,
+    }
+
+}
+//TODO need to add offsets
+fn instr_to_asm(i: &Instr, ops: &mut dynasmrt::x64::Assembler) {
+    match i {
+        Instr::IMov(Val::Reg(r), Val::Imm(n)) => {
+            dynasm!(ops ; .arch x64 ; mov Rq(reg_to_index(r)), *n);
+        }
+        Instr::IAdd(Val::Reg(r), Val::Imm(n)) => {
+            dynasm!(ops ; .arch x64 ; add Rq(reg_to_index(r)), *n);
+        }
+        Instr::ISub(Val::Reg(r), Val::Imm(n)) => {
+            dynasm!(ops ; .arch x64 ; sub Rq(reg_to_index(r)), *n);
+        }
+        Instr::IMov(Val::Reg(r), Val::RegOffset(r2, n)) => {
+            dynasm!(ops ; .arch x64 ; mov Rq(reg_to_index(r)), *n);
+        }
+        Instr::IAdd(Val::Reg(r), Val::RegOffset(r2, n)) => {
+            dynasm!(ops ; .arch x64 ; add Rq(reg_to_index(r)), *n);
+        }
+        Instr::ISub(Val::Reg(r), Val::RegOffset(r2, n)) => {
+            dynasm!(ops ; .arch x64 ; sub Rq(reg_to_index(r)), *n);
+        }
+        _ => {
+            panic!("Unknown instruction format")
+        }
+    }
+}
+
+fn instrs_to_asm(cmds: &Vec<Instr>, ops: &mut dynasmrt::x64::Assembler) {
+    cmds.iter().for_each(|c| instr_to_asm(c, ops))
+}
+
 fn main() -> std::io::Result<()> {
     let args: Vec<String> = env::args().collect();
 
@@ -278,9 +317,18 @@ fn main() -> std::io::Result<()> {
                 instr_string.push_str("\n");
             }
 
+           
+
 
             print!("{}",instr_string);
+
+            
+            let mut ops = dynasmrt::x64::Assembler::new().unwrap();
+            let start = ops.offset();
+
+
         }
+
       
     }
 
